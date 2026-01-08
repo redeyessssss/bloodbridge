@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>BloodBridge - Ask for Blood</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;500;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Poppins', Arial, sans-serif; }
+    #map { height: 100vh; width: 100%; }
+    .header {
+      position: absolute; top: 0; left: 0; right: 0;
+      background: rgba(0, 0, 0, 0.9); color: #ff4d4d;
+      padding: 15px 20px; z-index: 1000;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .header h1 { font-size: 22px; }
+    .back-btn {
+      background: #ff4d4d; color: white; border: none;
+      padding: 10px 20px; border-radius: 8px; cursor: pointer;
+      font-size: 14px; text-decoration: none;
+    }
+    .back-btn:hover { background: #cc0000; }
+    .sidebar {
+      position: absolute; top: 70px; left: 0; width: 350px;
+      height: calc(100vh - 70px); background: rgba(0, 0, 0, 0.92);
+      z-index: 1000; display: flex; flex-direction: column;
+      transition: transform 0.3s ease;
+    }
+    .sidebar.collapsed { transform: translateX(-350px); }
+    .sidebar-toggle {
+      position: absolute; top: 50%; right: -40px; transform: translateY(-50%);
+      background: rgba(0, 0, 0, 0.9); color: #ff4d4d; border: none;
+      width: 40px; height: 80px; cursor: pointer; font-size: 20px;
+      border-radius: 0 8px 8px 0;
+    }
+    .sidebar-header { padding: 20px; border-bottom: 1px solid #333; }
+    .sidebar-header h3 { color: #ff4d4d; margin-bottom: 5px; }
+    .sidebar-header p { color: #aaa; font-size: 13px; }
+    .hospital-list { flex: 1; overflow-y: auto; padding: 10px; }
+    .hospital-item {
+      background: rgba(255, 77, 77, 0.1); border: 1px solid #ff4d4d33;
+      border-radius: 10px; padding: 15px; margin-bottom: 10px;
+      cursor: pointer; transition: all 0.2s ease;
+    }
+    .hospital-item:hover { background: rgba(255, 77, 77, 0.25); transform: translateX(5px); }
+    .hospital-item h4 { color: white; font-size: 14px; margin-bottom: 5px; }
+    .hospital-item p { color: #aaa; font-size: 12px; }
+    .hospital-item .distance { color: #ff4d4d; font-size: 12px; margin-top: 5px; }
+    .loading {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      background: rgba(0, 0, 0, 0.9); color: white; padding: 30px 40px;
+      border-radius: 12px; z-index: 2000; text-align: center;
+    }
+    .loading-spinner {
+      border: 4px solid #333; border-top: 4px solid #ff4d4d;
+      border-radius: 50%; width: 40px; height: 40px;
+      animation: spin 1s linear infinite; margin: 0 auto 15px;
+    }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    .search-google-btn {
+      margin: 15px; padding: 12px; background: #ff4d4d; color: white;
+      border: none; border-radius: 8px; cursor: pointer; font-size: 14px;
+    }
+    .search-google-btn:hover { background: #cc0000; }
+    .hospital-list::-webkit-scrollbar { width: 6px; }
+    .hospital-list::-webkit-scrollbar-track { background: #222; }
+    .hospital-list::-webkit-scrollbar-thumb { background: #ff4d4d; border-radius: 3px; }
+
+    /* Modal Form Styles */
+    .modal-overlay {
+      display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.8); z-index: 3000;
+      justify-content: center; align-items: center;
+    }
+    .modal-overlay.active { display: flex; }
+    .modal {
+      background: #1a1a1a; border-radius: 16px; padding: 30px;
+      width: 90%; max-width: 450px; max-height: 90vh; overflow-y: auto;
+      border: 1px solid #ff4d4d33; box-shadow: 0 0 30px rgba(255,0,0,0.3);
+    }
+    .modal h2 { color: #ff4d4d; margin-bottom: 5px; font-size: 22px; }
+    .modal .hospital-name { color: #aaa; font-size: 14px; margin-bottom: 20px; }
+    .form-group { margin-bottom: 18px; }
+    .form-group label { display: block; color: #ccc; margin-bottom: 6px; font-size: 14px; }
+    .form-group input, .form-group select, .form-group textarea {
+      width: 100%; padding: 12px; background: rgba(255,255,255,0.1);
+      border: 1px solid #ff4d4d44; border-radius: 8px; color: white;
+      font-size: 14px; outline: none;
+    }
+    .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+      border-color: #ff4d4d;
+    }
+    .form-group select option { background: #1a1a1a; color: white; }
+    .form-group textarea { resize: vertical; min-height: 80px; }
+    .submit-btn {
+      width: 100%; padding: 14px; background: #ff4d4d; color: white;
+      border: none; border-radius: 8px; font-size: 16px; font-weight: 600;
+      cursor: pointer; margin-top: 10px;
+    }
+    .submit-btn:hover { background: #cc0000; }
+    .submit-btn:disabled { background: #666; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>🩸 BloodBridge - Ask for Blood</h1>
+    <a href="home.html" class="back-btn">← Back to Home</a>
+  </div>
+
+  <div id="loading" class="loading">
+    <div class="loading-spinner"></div>
+    <p>Getting your location...</p>
+  </div>
+
+  <div id="sidebar" class="sidebar">
+    <button class="sidebar-toggle" onclick="toggleSidebar()">☰</button>
+    <div class="sidebar-header">
+      <h3>🏥 Select a Hospital</h3>
+      <p id="status-text">Click a hospital to request blood</p>
+    </div>
+    <div class="hospital-list" id="hospital-list"></div>
+    <button class="search-google-btn" onclick="searchNearbyHospitals()">
+      🔍 Search Blood Banks on Google
+    </button>
+  </div>
+
+  <div id="map"></div>
+
+  <!-- Blood Request Form Modal -->
+  <div class="modal-overlay" id="modal-overlay">
+    <div class="modal">
+      <h2>🩸 Request Blood</h2>
+      <p class="hospital-name" id="selected-hospital-name"></p>
+      
+      <form id="blood-request-form">
+        <div class="form-group">
+          <label>Patient Name *</label>
+          <input type="text" id="patient-name" required placeholder="Enter patient name">
+        </div>
+        
+        <div class="form-group">
+          <label>Contact Number *</label>
+          <input type="tel" id="contact-number" required placeholder="Enter contact number">
+        </div>
+        
+        <div class="form-group">
+          <label>Blood Group Needed *</label>
+          <select id="blood-group" required>
+            <option value="">Select Blood Group</option>
+            <option value="A+">A+</option>
+            <option value="A-">A-</option>
+            <option value="B+">B+</option>
+            <option value="B-">B-</option>
+            <option value="AB+">AB+</option>
+            <option value="AB-">AB-</option>
+            <option value="O+">O+</option>
+            <option value="O-">O-</option>
+          </select>
+        </div>
+        
+        <div class="form-group">
+          <label>Units Required *</label>
+          <select id="units-required" required>
+            <option value="">Select Units</option>
+            <option value="1">1 Unit</option>
+            <option value="2">2 Units</option>
+            <option value="3">3 Units</option>
+            <option value="4">4 Units</option>
+            <option value="5+">5+ Units</option>
+          </select>
+        </div>
+        
+        <div class="form-group">
+          <label>Urgency Level *</label>
+          <select id="urgency" required>
+            <option value="">Select Urgency</option>
+            <option value="high">🔴 High - Need within hours</option>
+            <option value="medium">🟡 Medium - Need within 24 hours</option>
+            <option value="low">🟢 Low - Need within a week</option>
+          </select>
+        </div>
+        
+        <div class="form-group">
+          <label>Required By (Date & Time) *</label>
+          <input type="datetime-local" id="required-by" required>
+        </div>
+        
+        <div class="form-group">
+          <label>Additional Notes</label>
+          <textarea id="notes" placeholder="Any additional information..."></textarea>
+        </div>
+        
+        <button type="submit" class="submit-btn" id="submit-btn">Submit Blood Request</button>
+        <button type="button" class="submit-btn" style="background:#333; margin-top:10px;" onclick="closeModal()">Cancel</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+  <script src="firebase-config.js"></script>
+  
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    let map, userLat, userLng, hospitalMarkers = [], routeLine = null;
+    let selectedHospital = null;
+
+    function initMap() {
+      map = L.map('map').setView([20.5937, 78.9629], 5);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors'
+      }).addTo(map);
+
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            userLat = position.coords.latitude;
+            userLng = position.coords.longitude;
+            map.setView([userLat, userLng], 14);
+
+            const userIcon = L.divIcon({
+              html: '<div style="background: #4285F4; width: 18px; height: 18px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 10px rgba(66,133,244,0.8);"></div>',
+              className: 'user-marker', iconSize: [18, 18]
+            });
+
+            L.marker([userLat, userLng], { icon: userIcon })
+              .addTo(map).bindPopup('<strong>📍 You are here</strong>').openPopup();
+
+            document.getElementById('loading').style.display = 'none';
+            fetchNearbyBloodBanks(userLat, userLng);
+          },
+          (error) => {
+            document.getElementById('loading').innerHTML = `
+              <p>❌ Could not get your location</p>
+              <p style="font-size: 12px; color: #aaa; margin-top: 10px;">${error.message}</p>
+              <button onclick="location.reload()" style="margin-top: 15px; padding: 10px 20px; background: #ff4d4d; color: white; border: none; border-radius: 8px; cursor: pointer;">Try Again</button>
+            `;
+          },
+          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        );
+      }
+    }
+
+    function fetchNearbyBloodBanks(lat, lng) {
+      document.getElementById('status-text').textContent = 'Searching...';
+      const url = `https://nominatim.openstreetmap.org/search?format=json&q=hospital&limit=30&bounded=1&viewbox=${lng-0.1},${lat+0.1},${lng+0.1},${lat-0.1}`;
+
+      fetch(url, { headers: { 'User-Agent': 'BloodBridge App' } })
+        .then(response => response.json())
+        .then(data => {
+          const listEl = document.getElementById('hospital-list');
+          listEl.innerHTML = '';
+
+          if (!data || data.length === 0) {
+            document.getElementById('status-text').textContent = 'No hospitals found nearby';
+            return;
+          }
+
+          const places = data.map(place => ({
+            name: place.display_name.split(',')[0],
+            lat: parseFloat(place.lat),
+            lng: parseFloat(place.lon),
+            distance: getDistance(lat, lng, parseFloat(place.lat), parseFloat(place.lon))
+          })).sort((a, b) => a.distance - b.distance);
+
+          document.getElementById('status-text').textContent = `Found ${places.length} hospitals - Click to request blood`;
+
+          places.forEach((place) => {
+            const marker = L.marker([place.lat, place.lng]).addTo(map)
+              .bindPopup(`<strong>🏥 ${place.name}</strong><br><span style="color:#666">${place.distance.toFixed(1)} km away</span>`);
+            hospitalMarkers.push(marker);
+
+            const item = document.createElement('div');
+            item.className = 'hospital-item';
+            item.innerHTML = `
+              <h4>🏥 ${place.name}</h4>
+              <p class="distance">📍 ${place.distance.toFixed(1)} km away</p>
+            `;
+            item.onclick = () => {
+              showRoute(place.lat, place.lng);
+              marker.openPopup();
+              openRequestForm(place);
+            };
+            listEl.appendChild(item);
+          });
+        })
+        .catch(error => {
+          console.error("Error:", error);
+          document.getElementById('status-text').textContent = 'Error loading hospitals';
+        });
+    }
+
+    function getDistance(lat1, lon1, lat2, lon2) {
+      const R = 6371;
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLon/2) * Math.sin(dLon/2);
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    }
+
+    function toggleSidebar() {
+      document.getElementById('sidebar').classList.toggle('collapsed');
+    }
+
+    function showRoute(destLat, destLng) {
+      if (routeLine) map.removeLayer(routeLine);
+      const url = `https://router.project-osrm.org/route/v1/driving/${userLng},${userLat};${destLng},${destLat}?overview=full&geometries=geojson`;
+
+      fetch(url).then(r => r.json()).then(data => {
+        if (data.routes && data.routes.length > 0) {
+          const coords = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+          routeLine = L.polyline(coords, { color: '#00cc44', weight: 5, opacity: 0.8 }).addTo(map);
+          map.fitBounds(routeLine.getBounds(), { padding: [50, 50] });
+        }
+      }).catch(() => {
+        routeLine = L.polyline([[userLat, userLng], [destLat, destLng]], {
+          color: '#00cc44', weight: 4, opacity: 0.7, dashArray: '10, 10'
+        }).addTo(map);
+        map.fitBounds(routeLine.getBounds(), { padding: [50, 50] });
+      });
+    }
+
+    function openRequestForm(hospital) {
+      selectedHospital = hospital;
+      document.getElementById('selected-hospital-name').textContent = `at ${hospital.name}`;
+      document.getElementById('modal-overlay').classList.add('active');
+      
+      const now = new Date();
+      now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+      document.getElementById('required-by').min = now.toISOString().slice(0, 16);
+    }
+
+    function closeModal() {
+      document.getElementById('modal-overlay').classList.remove('active');
+      document.getElementById('blood-request-form').reset();
+    }
+
+    document.getElementById('blood-request-form').addEventListener('submit', function(e) {
+      e.preventDefault();
+      
+      const submitBtn = document.getElementById('submit-btn');
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Submitting...';
+      
+      const request = {
+        hospitalName: selectedHospital.name,
+        hospitalLat: selectedHospital.lat,
+        hospitalLng: selectedHospital.lng,
+        patientName: document.getElementById('patient-name').value,
+        contactNumber: document.getElementById('contact-number').value,
+        bloodGroup: document.getElementById('blood-group').value,
+        unitsRequired: document.getElementById('units-required').value,
+        urgency: document.getElementById('urgency').value,
+        requiredBy: document.getElementById('required-by').value,
+        notes: document.getElementById('notes').value,
+        createdAt: new Date().toISOString(),
+        userLat: userLat,
+        userLng: userLng
+      };
+
+      // Save to Firebase
+      BloodRequests.add(request)
+        .then(() => {
+          alert('✅ Blood request submitted successfully!\nDonors will be able to see your request.');
+          closeModal();
+        })
+        .catch((error) => {
+          console.error('Error saving request:', error);
+          alert('❌ Error submitting request. Please try again.');
+        })
+        .finally(() => {
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Submit Blood Request';
+        });
+    });
+
+    document.getElementById('modal-overlay').addEventListener('click', function(e) {
+      if (e.target === this) closeModal();
+    });
+
+    function searchNearbyHospitals() {
+      if (userLat && userLng) {
+        window.open(`https://www.google.com/maps/search/blood+bank/@${userLat},${userLng},14z`, '_blank');
+      }
+    }
+
+    initMap();
+  </script>
+</body>
+</html>

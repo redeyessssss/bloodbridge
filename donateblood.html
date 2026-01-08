@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>BloodBridge - Donate Blood</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;500;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Poppins', Arial, sans-serif; }
+    #map { height: 100vh; width: 100%; }
+    .header {
+      position: absolute; top: 0; left: 0; right: 0;
+      background: rgba(0, 0, 0, 0.9); color: #ff4d4d;
+      padding: 15px 20px; z-index: 1000;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .header h1 { font-size: 22px; }
+    .back-btn {
+      background: #ff4d4d; color: white; border: none;
+      padding: 10px 20px; border-radius: 8px; cursor: pointer;
+      font-size: 14px; text-decoration: none;
+    }
+    .back-btn:hover { background: #cc0000; }
+    .sidebar {
+      position: absolute; top: 70px; left: 0; width: 380px;
+      height: calc(100vh - 70px); background: rgba(0, 0, 0, 0.92);
+      z-index: 1000; display: flex; flex-direction: column;
+      transition: transform 0.3s ease;
+    }
+    .sidebar.collapsed { transform: translateX(-380px); }
+    .sidebar-toggle {
+      position: absolute; top: 50%; right: -40px; transform: translateY(-50%);
+      background: rgba(0, 0, 0, 0.9); color: #ff4d4d; border: none;
+      width: 40px; height: 80px; cursor: pointer; font-size: 20px;
+      border-radius: 0 8px 8px 0;
+    }
+    .sidebar-header { padding: 20px; border-bottom: 1px solid #333; }
+    .sidebar-header h3 { color: #ff4d4d; margin-bottom: 5px; }
+    .sidebar-header p { color: #aaa; font-size: 13px; }
+    .hospital-list { flex: 1; overflow-y: auto; padding: 10px; }
+    .hospital-item {
+      background: rgba(255, 77, 77, 0.1); border: 1px solid #ff4d4d33;
+      border-radius: 10px; padding: 15px; margin-bottom: 10px;
+      cursor: pointer; transition: all 0.2s ease;
+    }
+    .hospital-item:hover { background: rgba(255, 77, 77, 0.25); }
+    .hospital-item h4 { color: white; font-size: 14px; margin-bottom: 5px; }
+    .hospital-item p { color: #aaa; font-size: 12px; }
+    .hospital-item .distance { color: #ff4d4d; font-size: 12px; margin-top: 5px; }
+    
+    /* Blood Request Badge */
+    .request-badge {
+      background: #ff4d4d; color: white; padding: 4px 10px;
+      border-radius: 12px; font-size: 11px; margin-top: 8px;
+      display: inline-block; animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
+    }
+    
+    /* Request Details */
+    .request-item {
+      background: rgba(255, 200, 0, 0.1); border: 1px solid #ffaa0055;
+      border-radius: 8px; padding: 12px; margin-top: 10px;
+      cursor: pointer; transition: all 0.2s ease;
+    }
+    .request-item:hover { background: rgba(255, 200, 0, 0.2); }
+    .request-item .blood-type {
+      font-size: 18px; font-weight: bold; color: #ff4d4d;
+    }
+    .request-item .urgency-high { color: #ff4d4d; }
+    .request-item .urgency-medium { color: #ffaa00; }
+    .request-item .urgency-low { color: #00cc44; }
+    .request-item p { color: #ccc; font-size: 12px; margin-top: 4px; }
+
+    .loading {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      background: rgba(0, 0, 0, 0.9); color: white; padding: 30px 40px;
+      border-radius: 12px; z-index: 2000; text-align: center;
+    }
+    .loading-spinner {
+      border: 4px solid #333; border-top: 4px solid #ff4d4d;
+      border-radius: 50%; width: 40px; height: 40px;
+      animation: spin 1s linear infinite; margin: 0 auto 15px;
+    }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    .search-google-btn {
+      margin: 15px; padding: 12px; background: #ff4d4d; color: white;
+      border: none; border-radius: 8px; cursor: pointer; font-size: 14px;
+    }
+    .search-google-btn:hover { background: #cc0000; }
+    .hospital-list::-webkit-scrollbar { width: 6px; }
+    .hospital-list::-webkit-scrollbar-track { background: #222; }
+    .hospital-list::-webkit-scrollbar-thumb { background: #ff4d4d; border-radius: 3px; }
+
+    /* Request Detail Modal */
+    .modal-overlay {
+      display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.8); z-index: 3000;
+      justify-content: center; align-items: center;
+    }
+    .modal-overlay.active { display: flex; }
+    .modal {
+      background: #1a1a1a; border-radius: 16px; padding: 30px;
+      width: 90%; max-width: 450px; max-height: 90vh; overflow-y: auto;
+      border: 1px solid #ff4d4d33; box-shadow: 0 0 30px rgba(255,0,0,0.3);
+    }
+    .modal h2 { color: #ff4d4d; margin-bottom: 20px; font-size: 22px; }
+    .modal .detail-row {
+      display: flex; justify-content: space-between; padding: 12px 0;
+      border-bottom: 1px solid #333;
+    }
+    .modal .detail-row .label { color: #888; }
+    .modal .detail-row .value { color: white; font-weight: 500; }
+    .modal .blood-group-large {
+      font-size: 48px; color: #ff4d4d; text-align: center;
+      margin: 20px 0; font-weight: bold;
+    }
+    .modal .contact-btn {
+      width: 100%; padding: 14px; background: #00cc44; color: white;
+      border: none; border-radius: 8px; font-size: 16px; font-weight: 600;
+      cursor: pointer; margin-top: 20px;
+    }
+    .modal .contact-btn:hover { background: #00aa33; }
+    .modal .close-btn {
+      width: 100%; padding: 14px; background: #333; color: white;
+      border: none; border-radius: 8px; font-size: 16px;
+      cursor: pointer; margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>🩸 BloodBridge - Donate Blood</h1>
+    <a href="home.html" class="back-btn">← Back to Home</a>
+  </div>
+
+  <div id="loading" class="loading">
+    <div class="loading-spinner"></div>
+    <p>Getting your location...</p>
+  </div>
+
+  <div id="sidebar" class="sidebar">
+    <button class="sidebar-toggle" onclick="toggleSidebar()">☰</button>
+    <div class="sidebar-header">
+      <h3>🏥 Nearby Hospitals</h3>
+      <p id="status-text">Searching...</p>
+    </div>
+    <div class="hospital-list" id="hospital-list"></div>
+    <button class="search-google-btn" onclick="searchNearbyHospitals()">
+      🔍 Search on Google Maps
+    </button>
+  </div>
+
+  <div id="map"></div>
+
+  <!-- Request Detail Modal -->
+  <div class="modal-overlay" id="modal-overlay">
+    <div class="modal">
+      <h2>🩸 Blood Request Details</h2>
+      <div class="blood-group-large" id="modal-blood-group"></div>
+      <div id="modal-details"></div>
+      <a id="contact-btn" class="contact-btn" href="#">📞 Call Now</a>
+      <button class="close-btn" onclick="closeModal()">Close</button>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    let map, userLat, userLng, hospitalMarkers = [], routeLine = null;
+    let bloodRequests = [];
+
+    function initMap() {
+      map = L.map('map').setView([20.5937, 78.9629], 5);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors'
+      }).addTo(map);
+
+      // Load blood requests from localStorage
+      bloodRequests = JSON.parse(localStorage.getItem('bloodbridge_requests')) || [];
+
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            userLat = position.coords.latitude;
+            userLng = position.coords.longitude;
+            map.setView([userLat, userLng], 14);
+
+            const userIcon = L.divIcon({
+              html: '<div style="background: #4285F4; width: 18px; height: 18px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 10px rgba(66,133,244,0.8);"></div>',
+              className: 'user-marker', iconSize: [18, 18]
+            });
+
+            L.marker([userLat, userLng], { icon: userIcon })
+              .addTo(map).bindPopup('<strong>📍 You are here</strong>').openPopup();
+
+            document.getElementById('loading').style.display = 'none';
+            fetchNearbyHospitals(userLat, userLng);
+          },
+          (error) => {
+            document.getElementById('loading').innerHTML = `
+              <p>❌ Could not get your location</p>
+              <p style="font-size: 12px; color: #aaa; margin-top: 10px;">${error.message}</p>
+              <button onclick="location.reload()" style="margin-top: 15px; padding: 10px 20px; background: #ff4d4d; color: white; border: none; border-radius: 8px; cursor: pointer;">Try Again</button>
+            `;
+          },
+          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        );
+      }
+    }
+
+    function fetchNearbyHospitals(lat, lng) {
+      document.getElementById('status-text').textContent = 'Searching...';
+      const url = `https://nominatim.openstreetmap.org/search?format=json&q=hospital&limit=30&bounded=1&viewbox=${lng-0.1},${lat+0.1},${lng+0.1},${lat-0.1}`;
+
+      fetch(url, { headers: { 'User-Agent': 'BloodBridge App' } })
+        .then(response => response.json())
+        .then(data => {
+          const listEl = document.getElementById('hospital-list');
+          listEl.innerHTML = '';
+
+          if (!data || data.length === 0) {
+            document.getElementById('status-text').textContent = 'No hospitals found nearby';
+            return;
+          }
+
+          const places = data.map(place => ({
+            name: place.display_name.split(',')[0],
+            lat: parseFloat(place.lat),
+            lng: parseFloat(place.lon),
+            distance: getDistance(lat, lng, parseFloat(place.lat), parseFloat(place.lon))
+          })).sort((a, b) => a.distance - b.distance);
+
+          // Count total requests
+          const totalRequests = bloodRequests.length;
+          document.getElementById('status-text').textContent = 
+            `Found ${places.length} hospitals` + (totalRequests > 0 ? ` • ${totalRequests} blood requests` : '');
+
+          places.forEach((place) => {
+            // Find requests for this hospital
+            const hospitalRequests = bloodRequests.filter(r => 
+              r.hospitalName.toLowerCase() === place.name.toLowerCase() ||
+              (Math.abs(r.hospitalLat - place.lat) < 0.001 && Math.abs(r.hospitalLng - place.lng) < 0.001)
+            );
+
+            const marker = L.marker([place.lat, place.lng]).addTo(map)
+              .bindPopup(`<strong>🏥 ${place.name}</strong><br><span style="color:#666">${place.distance.toFixed(1)} km away</span>${hospitalRequests.length > 0 ? `<br><span style="color:#ff4d4d">${hospitalRequests.length} blood request(s)</span>` : ''}`);
+            hospitalMarkers.push(marker);
+
+            const item = document.createElement('div');
+            item.className = 'hospital-item';
+            
+            let requestsHTML = '';
+            if (hospitalRequests.length > 0) {
+              requestsHTML = `<div class="request-badge">🩸 ${hospitalRequests.length} blood request(s)</div>`;
+              hospitalRequests.forEach(req => {
+                const urgencyClass = `urgency-${req.urgency}`;
+                const urgencyText = req.urgency === 'high' ? '🔴 Urgent' : req.urgency === 'medium' ? '🟡 Medium' : '🟢 Low';
+                requestsHTML += `
+                  <div class="request-item" onclick="event.stopPropagation(); showRequestDetails(${req.id})">
+                    <span class="blood-type">${req.bloodGroup}</span>
+                    <span class="${urgencyClass}" style="float:right">${urgencyText}</span>
+                    <p>${req.unitsRequired} unit(s) needed • ${formatDate(req.requiredBy)}</p>
+                  </div>
+                `;
+              });
+            }
+
+            item.innerHTML = `
+              <h4>🏥 ${place.name}</h4>
+              <p class="distance">📍 ${place.distance.toFixed(1)} km away</p>
+              ${requestsHTML}
+            `;
+            item.onclick = () => {
+              showRoute(place.lat, place.lng);
+              marker.openPopup();
+            };
+            listEl.appendChild(item);
+          });
+        })
+        .catch(error => {
+          console.error("Error:", error);
+          document.getElementById('status-text').textContent = 'Error loading hospitals';
+        });
+    }
+
+    function getDistance(lat1, lon1, lat2, lon2) {
+      const R = 6371;
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLon/2) * Math.sin(dLon/2);
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    }
+
+    function formatDate(dateStr) {
+      const date = new Date(dateStr);
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    }
+
+    function toggleSidebar() {
+      document.getElementById('sidebar').classList.toggle('collapsed');
+    }
+
+    function showRoute(destLat, destLng) {
+      if (routeLine) map.removeLayer(routeLine);
+      const url = `https://router.project-osrm.org/route/v1/driving/${userLng},${userLat};${destLng},${destLat}?overview=full&geometries=geojson`;
+
+      fetch(url).then(r => r.json()).then(data => {
+        if (data.routes && data.routes.length > 0) {
+          const route = data.routes[0];
+          const coords = route.geometry.coordinates.map(c => [c[1], c[0]]);
+          routeLine = L.polyline(coords, { color: '#00cc44', weight: 5, opacity: 0.8 }).addTo(map);
+          map.fitBounds(routeLine.getBounds(), { padding: [50, 50] });
+          
+          const distanceKm = (route.distance / 1000).toFixed(1);
+          const durationMin = Math.round(route.duration / 60);
+          document.getElementById('status-text').textContent = `Route: ${distanceKm} km, ~${durationMin} min`;
+        }
+      }).catch(() => {
+        routeLine = L.polyline([[userLat, userLng], [destLat, destLng]], {
+          color: '#00cc44', weight: 4, opacity: 0.7, dashArray: '10, 10'
+        }).addTo(map);
+        map.fitBounds(routeLine.getBounds(), { padding: [50, 50] });
+      });
+    }
+
+    function showRequestDetails(requestId) {
+      const request = bloodRequests.find(r => r.id === requestId);
+      if (!request) return;
+
+      document.getElementById('modal-blood-group').textContent = request.bloodGroup;
+      
+      const urgencyText = request.urgency === 'high' ? '🔴 High - Need within hours' : 
+                          request.urgency === 'medium' ? '🟡 Medium - Need within 24 hours' : 
+                          '🟢 Low - Need within a week';
+
+      document.getElementById('modal-details').innerHTML = `
+        <div class="detail-row"><span class="label">Patient Name</span><span class="value">${request.patientName}</span></div>
+        <div class="detail-row"><span class="label">Hospital</span><span class="value">${request.hospitalName}</span></div>
+        <div class="detail-row"><span class="label">Units Required</span><span class="value">${request.unitsRequired}</span></div>
+        <div class="detail-row"><span class="label">Urgency</span><span class="value">${urgencyText}</span></div>
+        <div class="detail-row"><span class="label">Required By</span><span class="value">${formatDate(request.requiredBy)}</span></div>
+        <div class="detail-row"><span class="label">Contact</span><span class="value">${request.contactNumber}</span></div>
+        ${request.notes ? `<div class="detail-row"><span class="label">Notes</span><span class="value">${request.notes}</span></div>` : ''}
+        <div class="detail-row"><span class="label">Posted</span><span class="value">${formatDate(request.createdAt)}</span></div>
+      `;
+
+      document.getElementById('contact-btn').href = `tel:${request.contactNumber}`;
+      document.getElementById('modal-overlay').classList.add('active');
+    }
+
+    function closeModal() {
+      document.getElementById('modal-overlay').classList.remove('active');
+    }
+
+    document.getElementById('modal-overlay').addEventListener('click', function(e) {
+      if (e.target === this) closeModal();
+    });
+
+    function searchNearbyHospitals() {
+      if (userLat && userLng) {
+        window.open(`https://www.google.com/maps/search/blood+bank+hospital/@${userLat},${userLng},14z`, '_blank');
+      }
+    }
+
+    initMap();
+  </script>
+</body>
+</html>

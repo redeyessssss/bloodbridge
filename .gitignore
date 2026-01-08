@@ -1,0 +1,9 @@
+# Large files
+assets/signup.mp4
+
+# OS files
+.DS_Store
+assets/.DS_Store
+
+# IDE
+.vscode/
