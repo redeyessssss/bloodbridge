@@ -39,18 +39,20 @@
 
 @keyframes floatUp {
   0% {
-    transform: translateY(100vh) rotate(0deg) scale(1);
+    bottom: -100px;
     opacity: 0;
+    transform: rotate(0deg) scale(1);
   }
-  5% {
+  10% {
     opacity: 0.7;
   }
-  95% {
+  90% {
     opacity: 0.7;
   }
   100% {
-    transform: translateY(-100px) rotate(360deg) scale(0.8);
+    bottom: 110vh;
     opacity: 0;
+    transform: rotate(360deg) scale(0.8);
   }
 }
 
@@ -60,7 +62,7 @@
   background: radial-gradient(ellipse at 30% 20%, rgba(255, 100, 100, 0.8), rgba(180, 0, 0, 0.9) 50%, rgba(100, 0, 0, 0.95));
   border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
   filter: blur(1px);
-  animation: floatUp 15s infinite ease-in-out;
+  animation: floatUp linear infinite;
   opacity: 0;
 }
 
