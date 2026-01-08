@@ -29,12 +29,31 @@
       z-index: 1000; display: flex; flex-direction: column;
       transition: transform 0.3s ease;
     }
-    .sidebar.collapsed { transform: translateX(-380px); }
+    .sidebar.collapsed { transform: translateX(-100%); }
     .sidebar-toggle {
       position: absolute; top: 50%; right: -40px; transform: translateY(-50%);
       background: rgba(0, 0, 0, 0.9); color: #ff4d4d; border: none;
       width: 40px; height: 80px; cursor: pointer; font-size: 20px;
       border-radius: 0 8px 8px 0;
+    }
+
+    /* Mobile Responsive */
+    @media (max-width: 768px) {
+      .header h1 { font-size: 16px; }
+      .back-btn { padding: 8px 12px; font-size: 12px; }
+      .sidebar { width: 100%; }
+      .sidebar-toggle { right: -35px; width: 35px; height: 60px; font-size: 16px; }
+      .sidebar-header { padding: 15px; }
+      .sidebar-header h3 { font-size: 16px; }
+      .hospital-item { padding: 12px; }
+      .hospital-item h4 { font-size: 13px; }
+      .request-item { padding: 10px; }
+      .request-item .blood-type { font-size: 16px; }
+      .modal { padding: 20px; width: 95%; }
+      .modal h2 { font-size: 18px; }
+      .modal .blood-group-large { font-size: 36px; }
+      .modal .detail-row { padding: 10px 0; font-size: 13px; }
+      .loading { padding: 20px; width: 90%; }
     }
     .sidebar-header { padding: 20px; border-bottom: 1px solid #333; }
     .sidebar-header h3 { color: #ff4d4d; margin-bottom: 5px; }
