@@ -234,9 +234,30 @@
             fetchNearbyBloodBanks(userLat, userLng);
           },
           (error) => {
+            console.error('Geolocation error:', error);
+            let errorMsg = '';
+            let helpText = '';
+            switch(error.code) {
+              case 1:
+                errorMsg = 'Location permission denied';
+                helpText = 'Please enable location access in your browser settings';
+                break;
+              case 2:
+                errorMsg = 'Location unavailable';
+                helpText = 'Please check your GPS/location settings';
+                break;
+              case 3:
+                errorMsg = 'Location request timed out';
+                helpText = 'Please try again';
+                break;
+              default:
+                errorMsg = error.message;
+            }
             document.getElementById('loading').innerHTML = `
-              <p>❌ Could not get your location</p>
-              <p style="font-size: 12px; color: #aaa; margin-top: 10px;">${error.message}</p>
+              <p>❌ ${errorMsg}</p>
+              <p style="font-size: 12px; color: #aaa; margin-top: 10px;">${helpText}</p>
+              <p style="font-size: 11px; color: #666; margin-top: 10px;"><strong>Mobile:</strong> Settings → Browser → Location → Allow</p>
+              <p style="font-size: 11px; color: #666;"><strong>iPhone:</strong> Settings → Safari → Location → Allow</p>
               <button onclick="location.reload()" style="margin-top: 15px; padding: 10px 20px; background: #ff4d4d; color: white; border: none; border-radius: 8px; cursor: pointer;">Try Again</button>
             `;
           },

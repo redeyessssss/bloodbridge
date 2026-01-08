@@ -192,8 +192,25 @@
             fetchNearbyHospitals(userLat, userLng);
           },
           (error) => {
+            console.error('Geolocation error:', error);
             document.getElementById('loading').style.display = 'none';
-            document.getElementById('status-text').textContent = 'Location unavailable';
+            
+            let errorMsg = 'Location unavailable';
+            if (error.code === 1) {
+              errorMsg = 'Location denied - enable in settings';
+            }
+            document.getElementById('status-text').textContent = errorMsg;
+            
+            // Show help message in sidebar
+            const listEl = document.getElementById('hospital-list');
+            listEl.innerHTML = `
+              <div style="padding: 20px; text-align: center; color: #aaa;">
+                <p style="margin-bottom: 15px;">📍 Location access needed to find nearby hospitals</p>
+                <p style="font-size: 12px; margin-bottom: 10px;"><strong>On Mobile:</strong><br>Settings → Browser → Site Settings → Location → Allow</p>
+                <p style="font-size: 12px; margin-bottom: 15px;"><strong>On iPhone:</strong><br>Settings → Safari → Location → Allow</p>
+                <button onclick="location.reload()" style="padding: 10px 20px; background: #ff4d4d; color: white; border: none; border-radius: 8px; cursor: pointer;">Try Again</button>
+              </div>
+            `;
             renderList();
           },
           { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
