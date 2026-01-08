@@ -49,33 +49,17 @@
     .hospital-item h4 { color: white; font-size: 14px; margin-bottom: 5px; }
     .hospital-item p { color: #aaa; font-size: 12px; }
     .hospital-item .distance { color: #ff4d4d; font-size: 12px; margin-top: 5px; }
-    
-    /* Blood Request Badge */
-    .request-badge {
-      background: #ff4d4d; color: white; padding: 4px 10px;
-      border-radius: 12px; font-size: 11px; margin-top: 8px;
-      display: inline-block; animation: pulse 2s infinite;
-    }
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.7; }
-    }
-    
-    /* Request Details */
     .request-item {
-      background: rgba(255, 200, 0, 0.1); border: 1px solid #ffaa0055;
+      background: rgba(255, 200, 0, 0.15); border: 1px solid #ffaa0055;
       border-radius: 8px; padding: 12px; margin-top: 10px;
       cursor: pointer; transition: all 0.2s ease;
     }
-    .request-item:hover { background: rgba(255, 200, 0, 0.2); }
-    .request-item .blood-type {
-      font-size: 18px; font-weight: bold; color: #ff4d4d;
-    }
+    .request-item:hover { background: rgba(255, 200, 0, 0.25); }
+    .request-item .blood-type { font-size: 18px; font-weight: bold; color: #ff4d4d; }
     .request-item .urgency-high { color: #ff4d4d; }
     .request-item .urgency-medium { color: #ffaa00; }
     .request-item .urgency-low { color: #00cc44; }
     .request-item p { color: #ccc; font-size: 12px; margin-top: 4px; }
-
     .loading {
       position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
       background: rgba(0, 0, 0, 0.9); color: white; padding: 30px 40px;
@@ -95,8 +79,6 @@
     .hospital-list::-webkit-scrollbar { width: 6px; }
     .hospital-list::-webkit-scrollbar-track { background: #222; }
     .hospital-list::-webkit-scrollbar-thumb { background: #ff4d4d; border-radius: 3px; }
-
-    /* Request Detail Modal */
     .modal-overlay {
       display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
       background: rgba(0,0,0,0.8); z-index: 3000;
@@ -114,7 +96,7 @@
       border-bottom: 1px solid #333;
     }
     .modal .detail-row .label { color: #888; }
-    .modal .detail-row .value { color: white; font-weight: 500; }
+    .modal .detail-row .value { color: white; font-weight: 500; text-align: right; max-width: 60%; }
     .modal .blood-group-large {
       font-size: 48px; color: #ff4d4d; text-align: center;
       margin: 20px 0; font-weight: bold;
@@ -122,7 +104,7 @@
     .modal .contact-btn {
       width: 100%; padding: 14px; background: #00cc44; color: white;
       border: none; border-radius: 8px; font-size: 16px; font-weight: 600;
-      cursor: pointer; margin-top: 20px;
+      cursor: pointer; margin-top: 20px; text-decoration: none; display: block; text-align: center;
     }
     .modal .contact-btn:hover { background: #00aa33; }
     .modal .close-btn {
@@ -146,8 +128,8 @@
   <div id="sidebar" class="sidebar">
     <button class="sidebar-toggle" onclick="toggleSidebar()">☰</button>
     <div class="sidebar-header">
-      <h3>🏥 Nearby Hospitals</h3>
-      <p id="status-text">Searching...</p>
+      <h3>🏥 Blood Requests & Hospitals</h3>
+      <p id="status-text">Loading...</p>
     </div>
     <div class="hospital-list" id="hospital-list"></div>
     <button class="search-google-btn" onclick="searchNearbyHospitals()">
@@ -157,7 +139,6 @@
 
   <div id="map"></div>
 
-  <!-- Request Detail Modal -->
   <div class="modal-overlay" id="modal-overlay">
     <div class="modal">
       <h2>🩸 Blood Request Details</h2>
@@ -168,10 +149,16 @@
     </div>
   </div>
 
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+  <script src="firebase-config.js"></script>
+
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
     let map, userLat, userLng, hospitalMarkers = [], routeLine = null;
     let bloodRequests = [];
+    let hospitalsData = [];
 
     function initMap() {
       map = L.map('map').setView([20.5937, 78.9629], 5);
@@ -179,8 +166,12 @@
         attribution: '© OpenStreetMap contributors'
       }).addTo(map);
 
-      // Load blood requests from localStorage
-      bloodRequests = JSON.parse(localStorage.getItem('bloodbridge_requests')) || [];
+      // Listen for blood requests from Firebase (real-time)
+      BloodRequests.getAll((requests) => {
+        console.log('Firebase requests loaded:', requests.length);
+        bloodRequests = requests;
+        renderList();
+      });
 
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
@@ -201,90 +192,112 @@
             fetchNearbyHospitals(userLat, userLng);
           },
           (error) => {
-            document.getElementById('loading').innerHTML = `
-              <p>❌ Could not get your location</p>
-              <p style="font-size: 12px; color: #aaa; margin-top: 10px;">${error.message}</p>
-              <button onclick="location.reload()" style="margin-top: 15px; padding: 10px 20px; background: #ff4d4d; color: white; border: none; border-radius: 8px; cursor: pointer;">Try Again</button>
-            `;
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('status-text').textContent = 'Location unavailable';
+            renderList();
           },
           { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
         );
+      } else {
+        document.getElementById('loading').style.display = 'none';
+        renderList();
       }
     }
 
     function fetchNearbyHospitals(lat, lng) {
-      document.getElementById('status-text').textContent = 'Searching...';
-      const url = `https://nominatim.openstreetmap.org/search?format=json&q=hospital&limit=30&bounded=1&viewbox=${lng-0.1},${lat+0.1},${lng+0.1},${lat-0.1}`;
+      const url = `https://nominatim.openstreetmap.org/search?format=json&q=hospital&limit=20&bounded=1&viewbox=${lng-0.1},${lat+0.1},${lng+0.1},${lat-0.1}`;
 
       fetch(url, { headers: { 'User-Agent': 'BloodBridge App' } })
         .then(response => response.json())
         .then(data => {
-          const listEl = document.getElementById('hospital-list');
-          listEl.innerHTML = '';
-
-          if (!data || data.length === 0) {
-            document.getElementById('status-text').textContent = 'No hospitals found nearby';
-            return;
+          if (data && data.length > 0) {
+            hospitalsData = data.map(place => ({
+              name: place.display_name.split(',')[0],
+              lat: parseFloat(place.lat),
+              lng: parseFloat(place.lon),
+              distance: getDistance(lat, lng, parseFloat(place.lat), parseFloat(place.lon))
+            })).sort((a, b) => a.distance - b.distance);
           }
-
-          const places = data.map(place => ({
-            name: place.display_name.split(',')[0],
-            lat: parseFloat(place.lat),
-            lng: parseFloat(place.lon),
-            distance: getDistance(lat, lng, parseFloat(place.lat), parseFloat(place.lon))
-          })).sort((a, b) => a.distance - b.distance);
-
-          // Count total requests
-          const totalRequests = bloodRequests.length;
-          document.getElementById('status-text').textContent = 
-            `Found ${places.length} hospitals` + (totalRequests > 0 ? ` • ${totalRequests} blood requests` : '');
-
-          places.forEach((place) => {
-            // Find requests for this hospital
-            const hospitalRequests = bloodRequests.filter(r => 
-              r.hospitalName.toLowerCase() === place.name.toLowerCase() ||
-              (Math.abs(r.hospitalLat - place.lat) < 0.001 && Math.abs(r.hospitalLng - place.lng) < 0.001)
-            );
-
-            const marker = L.marker([place.lat, place.lng]).addTo(map)
-              .bindPopup(`<strong>🏥 ${place.name}</strong><br><span style="color:#666">${place.distance.toFixed(1)} km away</span>${hospitalRequests.length > 0 ? `<br><span style="color:#ff4d4d">${hospitalRequests.length} blood request(s)</span>` : ''}`);
-            hospitalMarkers.push(marker);
-
-            const item = document.createElement('div');
-            item.className = 'hospital-item';
-            
-            let requestsHTML = '';
-            if (hospitalRequests.length > 0) {
-              requestsHTML = `<div class="request-badge">🩸 ${hospitalRequests.length} blood request(s)</div>`;
-              hospitalRequests.forEach(req => {
-                const urgencyClass = `urgency-${req.urgency}`;
-                const urgencyText = req.urgency === 'high' ? '🔴 Urgent' : req.urgency === 'medium' ? '🟡 Medium' : '🟢 Low';
-                requestsHTML += `
-                  <div class="request-item" onclick="event.stopPropagation(); showRequestDetails(${req.id})">
-                    <span class="blood-type">${req.bloodGroup}</span>
-                    <span class="${urgencyClass}" style="float:right">${urgencyText}</span>
-                    <p>${req.unitsRequired} unit(s) needed • ${formatDate(req.requiredBy)}</p>
-                  </div>
-                `;
-              });
-            }
-
-            item.innerHTML = `
-              <h4>🏥 ${place.name}</h4>
-              <p class="distance">📍 ${place.distance.toFixed(1)} km away</p>
-              ${requestsHTML}
-            `;
-            item.onclick = () => {
-              showRoute(place.lat, place.lng);
-              marker.openPopup();
-            };
-            listEl.appendChild(item);
-          });
+          renderList();
         })
-        .catch(error => {
-          console.error("Error:", error);
-          document.getElementById('status-text').textContent = 'Error loading hospitals';
+        .catch(() => renderList());
+    }
+
+    function renderList() {
+      const listEl = document.getElementById('hospital-list');
+      listEl.innerHTML = '';
+
+      // Clear old markers
+      hospitalMarkers.forEach(m => map.removeLayer(m));
+      hospitalMarkers = [];
+
+      const totalRequests = bloodRequests.length;
+      document.getElementById('status-text').textContent = 
+        (totalRequests > 0 ? `${totalRequests} blood request(s)` : 'No requests') + 
+        (hospitalsData.length > 0 ? ` • ${hospitalsData.length} hospitals` : '');
+
+      // Show ALL blood requests at the top
+      if (bloodRequests.length > 0) {
+        const requestsSection = document.createElement('div');
+        requestsSection.className = 'hospital-item';
+        requestsSection.style.background = 'rgba(255, 0, 0, 0.2)';
+        requestsSection.style.borderColor = '#ff4d4d';
+        
+        let html = `<h4 style="color:#ff4d4d">🆘 Blood Requests (${bloodRequests.length})</h4>`;
+        
+        bloodRequests.forEach(req => {
+          const urgencyClass = `urgency-${req.urgency}`;
+          const urgencyText = req.urgency === 'high' ? '🔴 Urgent' : req.urgency === 'medium' ? '🟡 Medium' : '🟢 Low';
+          html += `
+            <div class="request-item" onclick="showRequestDetails('${req.id}')">
+              <span class="blood-type">${req.bloodGroup}</span>
+              <span class="${urgencyClass}" style="float:right">${urgencyText}</span>
+              <p><strong>${req.hospitalName}</strong></p>
+              <p>${req.unitsRequired} unit(s) • ${formatDate(req.requiredBy)}</p>
+            </div>
+          `;
+
+          // Add marker for request
+          if (req.hospitalLat && req.hospitalLng) {
+            const marker = L.marker([req.hospitalLat, req.hospitalLng]).addTo(map)
+              .bindPopup(`<strong>🩸 ${req.bloodGroup} needed</strong><br>${req.hospitalName}<br><span style="color:#ff4d4d">${urgencyText}</span>`);
+            hospitalMarkers.push(marker);
+          }
         });
+
+        requestsSection.innerHTML = html;
+        listEl.appendChild(requestsSection);
+      } else {
+        const noRequests = document.createElement('div');
+        noRequests.className = 'hospital-item';
+        noRequests.innerHTML = `<p style="color:#888; text-align:center;">No blood requests at the moment</p>`;
+        listEl.appendChild(noRequests);
+      }
+
+      // Show hospitals
+      if (hospitalsData.length > 0) {
+        const hospitalsHeader = document.createElement('div');
+        hospitalsHeader.innerHTML = `<h4 style="color:#ff4d4d; padding: 15px 0 5px;">🏥 Nearby Hospitals</h4>`;
+        listEl.appendChild(hospitalsHeader);
+
+        hospitalsData.forEach((place) => {
+          const marker = L.marker([place.lat, place.lng]).addTo(map)
+            .bindPopup(`<strong>🏥 ${place.name}</strong><br>${place.distance.toFixed(1)} km away`);
+          hospitalMarkers.push(marker);
+
+          const item = document.createElement('div');
+          item.className = 'hospital-item';
+          item.innerHTML = `
+            <h4>🏥 ${place.name}</h4>
+            <p class="distance">📍 ${place.distance.toFixed(1)} km away</p>
+          `;
+          item.onclick = () => {
+            showRoute(place.lat, place.lng);
+            marker.openPopup();
+          };
+          listEl.appendChild(item);
+        });
+      }
     }
 
     function getDistance(lat1, lon1, lat2, lon2) {
@@ -308,18 +321,15 @@
 
     function showRoute(destLat, destLng) {
       if (routeLine) map.removeLayer(routeLine);
+      if (!userLat || !userLng) return;
+      
       const url = `https://router.project-osrm.org/route/v1/driving/${userLng},${userLat};${destLng},${destLat}?overview=full&geometries=geojson`;
 
       fetch(url).then(r => r.json()).then(data => {
         if (data.routes && data.routes.length > 0) {
-          const route = data.routes[0];
-          const coords = route.geometry.coordinates.map(c => [c[1], c[0]]);
+          const coords = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
           routeLine = L.polyline(coords, { color: '#00cc44', weight: 5, opacity: 0.8 }).addTo(map);
           map.fitBounds(routeLine.getBounds(), { padding: [50, 50] });
-          
-          const distanceKm = (route.distance / 1000).toFixed(1);
-          const durationMin = Math.round(route.duration / 60);
-          document.getElementById('status-text').textContent = `Route: ${distanceKm} km, ~${durationMin} min`;
         }
       }).catch(() => {
         routeLine = L.polyline([[userLat, userLng], [destLat, destLng]], {
@@ -352,6 +362,11 @@
 
       document.getElementById('contact-btn').href = `tel:${request.contactNumber}`;
       document.getElementById('modal-overlay').classList.add('active');
+
+      // Show route to hospital
+      if (request.hospitalLat && request.hospitalLng) {
+        showRoute(request.hospitalLat, request.hospitalLng);
+      }
     }
 
     function closeModal() {
